@@ -1,0 +1,10 @@
+node_modules
+dist
+src-tauri/target
+src-tauri/gen
+*.log
+
+# Llaves de firma de actualizaciones: nunca al repo
+*.key
+*.key.pub
+*.tsbuildinfo
