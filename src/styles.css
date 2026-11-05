@@ -495,3 +495,12 @@ button.erase.on { border-color: var(--danger); background: #fff1ec; }
 }
 .update-banner .bar { margin-top: 6px; }
 @media (prefers-reduced-motion: reduce) { .update-banner { animation: none; } }
+
+/* Reproductor en la mini ventana */
+.now-playing.compact { gap: 4px 8px; margin-top: 6px; padding-top: 8px; }
+.now-playing.compact .np-art { width: 32px; height: 32px; border-radius: 6px; }
+.now-playing.compact .np-title { font-size: 0.8rem; }
+.now-playing.compact .np-artist { font-size: 0.72rem; }
+.now-playing.compact .np-controls { flex-basis: 100%; justify-content: center; gap: 6px; }
+.now-playing.compact .np-controls button { width: 26px; height: 26px; }
+.now-playing.compact .np-controls .np-main { width: 30px; height: 30px; }

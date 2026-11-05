@@ -30,9 +30,15 @@ function miniState(now: number): MiniState {
     const remaining = remainingMs(active, now);
     const minutes = elapsed / 60_000;
     const cat = categories.find((c) => c.id === active.categoryId);
+    const running = active.pausedAt == null;
+    const planned = active.plannedMin ? active.plannedMin * 60_000 : null;
     return {
       kind: "focus",
       clock: formatClock(remaining ?? elapsed),
+      clockMs: remaining ?? elapsed,
+      clockDir: !running ? 0 : remaining != null ? -1 : 1,
+      sentAt: now,
+      progressRate: running && planned ? 1 / planned : 0,
       label: `${cat?.icon ?? ""} ${active.title ?? cat?.name ?? ""}`,
       color: cat?.color ?? "#4f9a42",
       speciesId: PREVIEW_SPECIES[tierFor(minutes).index],
@@ -46,6 +52,10 @@ function miniState(now: number): MiniState {
     return {
       kind: "break",
       clock: formatClock(left),
+      clockMs: left,
+      clockDir: -1,
+      sentAt: now,
+      progressRate: 1 / (breakTimer.durationMin * 60_000),
       label: breakTimer.long ? "☕ Descanso largo" : "☕ Descanso",
       color: "#3fb6c9",
       speciesId: "sprout",
@@ -54,7 +64,7 @@ function miniState(now: number): MiniState {
       progress: 1 - left / (breakTimer.durationMin * 60_000),
     };
   }
-  return { kind: "idle", clock: "--:--", label: "Sin sesión", color: "#4f9a42", speciesId: "sprout", growth: 0.6, paused: false, progress: null };
+  return { kind: "idle", clock: "--:--", clockMs: 0, clockDir: 0, sentAt: now, progressRate: 0, label: "Sin sesión", color: "#4f9a42", speciesId: "sprout", growth: 0.6, paused: false, progress: null };
 }
 
 async function setWindowTitle(title: string) {
@@ -149,6 +159,7 @@ export function useAppController() {
         if (a === "finish" && s.active) s.finish();
         if (a === "skip-break") s.endBreak();
         if (a === "show-main") void showMainWindow();
+        if (a === "ready") void emitMiniState(miniState(Date.now()));
       }),
     ];
     void registerGlobalShortcut(primaryAction).then((ok) => useDesktopStatus.setState({ shortcutRegistered: ok }));

@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { setMediaVolume, useNowPlaying } from "../lib/media";
 
-/** Widget compacto del reproductor del sistema. No se muestra si no suena nada. */
-export function NowPlaying() {
+/**
+ * Widget compacto del reproductor del sistema. No se muestra si no suena nada.
+ * `compact` es la versión de la mini ventana: sin volumen y más chica.
+ */
+export function NowPlaying({ compact = false, onVisibleChange }: { compact?: boolean; onVisibleChange?: (visible: boolean) => void }) {
   const { info, control } = useNowPlaying();
+  const visible = info != null;
+  useEffect(() => { onVisibleChange?.(visible); }, [visible, onVisibleChange]);
   if (!info) return null;
 
   const icon = (d: string) => (
@@ -11,7 +16,7 @@ export function NowPlaying() {
   );
 
   return (
-    <div className="now-playing" aria-label="Sonando ahora">
+    <div className={`now-playing${compact ? " compact" : ""}`} aria-label="Sonando ahora">
       {info.art
         ? <img className="np-art" src={info.art} alt="" draggable={false} />
         : <div className="np-art np-art-empty" aria-hidden>♪</div>}
@@ -31,7 +36,7 @@ export function NowPlaying() {
           {icon("M13 4h2v12h-2zM3 4v12l9-6z")}
         </button>
       </div>
-      {info.volume != null && <VolumeSlider key={info.source} volume={info.volume} />}
+      {!compact && info.volume != null && <VolumeSlider key={info.source} volume={info.volume} />}
     </div>
   );
 }

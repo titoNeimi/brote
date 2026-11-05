@@ -13,6 +13,15 @@ export const useDesktopStatus = create<{ shortcutRegistered: boolean | null }>((
 export interface MiniState {
   kind: "focus" | "break" | "idle";
   clock: string;
+  /**
+   * Reloj en ms al momento `sentAt` y hacia dónde corre (-1 cuenta regresiva, 1 cronómetro, 0 quieto).
+   * La mini ventana lo avanza sola: la principal, oculta, puede tener los timers ralentizados.
+   */
+  clockMs: number;
+  clockDir: -1 | 0 | 1;
+  sentAt: number;
+  /** Cuánto avanza `progress` por ms (0 si está quieto). */
+  progressRate: number;
   label: string;
   color: string;
   speciesId: string;
@@ -21,7 +30,8 @@ export interface MiniState {
   progress: number | null;
 }
 
-export type MiniAction = "toggle" | "finish" | "skip-break" | "show-main";
+/** `ready`: la mini ventana acaba de abrir y pide el estado sin esperar al próximo tick. */
+export type MiniAction = "toggle" | "finish" | "skip-break" | "show-main" | "ready";
 
 export async function updateTray(tooltip: string, toggleLabel: string) {
   if (!isTauri) return;
@@ -47,25 +57,36 @@ export async function onTrayAction(handler: (action: string) => void): Promise<(
   return listen<string>("tray", (e) => handler(e.payload));
 }
 
+export const MINI_WIDTH = 240;
+export const MINI_HEIGHT = 300;
+/** Alto extra cuando la mini ventana muestra el reproductor. */
+export const MINI_MUSIC_HEIGHT = 74;
+
+/**
+ * Abre la mini ventana y oculta la principal: nunca están las dos a la vista.
+ * Volver a la principal (desde la mini o la bandeja) cierra la mini; eso lo hace Rust en `show_main`.
+ */
 export async function openMiniWindow() {
   if (!isTauri) return;
   const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const existing = await WebviewWindow.getByLabel("mini");
   if (existing) {
     await existing.show();
     await existing.setFocus();
-    return;
+  } else {
+    new WebviewWindow("mini", {
+      url: "index.html?mini=1",
+      title: "Brote",
+      width: MINI_WIDTH,
+      height: MINI_HEIGHT,
+      resizable: false,
+      decorations: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+    });
   }
-  new WebviewWindow("mini", {
-    url: "index.html?mini=1",
-    title: "Brote",
-    width: 230,
-    height: 300,
-    resizable: false,
-    decorations: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-  });
+  await getCurrentWindow().hide();
 }
 
 export async function emitMiniState(state: MiniState) {

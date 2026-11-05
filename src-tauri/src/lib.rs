@@ -15,11 +15,16 @@ struct DesktopState {
     toggle_item: Mutex<Option<MenuItem<Wry>>>,
 }
 
+/// Muestra la ventana principal. La mini ventana solo existe mientras la principal está oculta,
+/// así que se cierra.
 fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
+    }
+    if let Some(mini) = app.get_webview_window("mini") {
+        let _ = mini.close();
     }
 }
 
