@@ -4,8 +4,9 @@ import { cleanTitle, type ActiveSession, type BreakTimer, type Category, type Ce
 import * as timer from "./core/timer";
 import { rollReward, tierFor } from "./core/rewards";
 import {
-  canErasePath, canExpand, canMoveDecoration, canPaintPath, canPlaceDecoration, ensurePlots, expandPrice, findPlotSpot,
-  freeCell, growCells, key, layoutGarden, migrateLegacyGarden, moveTarget, newPlot, type LegacyPlant,
+  BASE_CATEGORY_SLOTS, canErasePath, canExpand, canMoveDecoration, canPaintPath, canPlaceDecoration, categorySlotPrice,
+  ensurePlots, expandPrice, findPlotSpot, freeCell, growCells, key, layoutGarden, migrateLegacyGarden, moveTarget, newPlot,
+  occupiedCells, type LegacyPlant,
 } from "./core/garden";
 import { currentStreak, focusedSince, startOfWeek } from "./core/stats";
 import {
@@ -13,6 +14,7 @@ import {
 } from "./core/progression";
 import { DECORATION_BY_ID, FENCE_BY_ID, FERTILIZER, PATH_BY_ID, SELL_RATIO } from "./core/shop";
 import type { Hemisphere, Season } from "./core/seasons";
+import type { DayPhasePref } from "./core/daynight";
 import { appStorage } from "./lib/platform";
 
 export interface SessionResult {
@@ -48,6 +50,8 @@ export interface Preferences {
   closeToTray: boolean;
   hemisphere: Hemisphere;
   season: Season | "auto";
+  /** Día/noche: "auto" sigue la hora del sistema. */
+  dayNight: DayPhasePref;
   /** Nombre que se le pone a la próxima sesión. Se conserva para las siguientes de la misma categoría. */
   sessionTitle?: string;
   /** Buscar versiones nuevas al iniciar y cada 6 horas. */
@@ -70,6 +74,8 @@ interface Persisted {
   paths: Paths;
   /** Estilos de valla comprados. */
   fencesOwned: string[];
+  /** Cuántas categorías activas se pueden tener (se compran más con monedas). */
+  categorySlots: number;
   coins: number;
   inventory: { fertilizer: number };
   achievements: Record<string, number>;
@@ -89,8 +95,11 @@ interface State extends Persisted {
 
   setPrefs(p: Partial<Preferences>): void;
   setPomodoro(p: Partial<PomodoroPrefs>): void;
-  addCategory(c: Omit<Category, "id" | "createdAt" | "archived">): void;
+  /** Devuelve false si no quedan espacios de categoría. */
+  addCategory(c: Omit<Category, "id" | "createdAt" | "archived">): boolean;
+  /** Restaurar una categoría archivada también necesita un espacio libre. */
   updateCategory(id: string, patch: Partial<Omit<Category, "id">>): void;
+  buyCategorySlot(): boolean;
   deleteCategory(id: string): void;
 
   /** Inicia una sesión con las preferencias guardadas. */
@@ -148,6 +157,7 @@ const DEFAULT_PREFS: Preferences = {
   closeToTray: true,
   hemisphere: "south",
   season: "auto",
+  dayNight: "auto",
   autoUpdate: true,
 };
 
@@ -159,6 +169,7 @@ const INITIAL: Persisted = {
   plots: ensurePlots(DEFAULT_CATEGORIES, [], [], {}),
   paths: {},
   fencesOwned: ["wood"],
+  categorySlots: BASE_CATEGORY_SLOTS,
   coins: 0,
   inventory: { fertilizer: 0 },
   achievements: {},
@@ -227,19 +238,46 @@ export const useStore = create<State>()(
       setPrefs: (p) => set((s) => ({ prefs: { ...s.prefs, ...p } })),
       setPomodoro: (p) => set((s) => ({ prefs: { ...s.prefs, pomodoro: { ...s.prefs.pomodoro, ...p } } })),
 
-      addCategory: (c) =>
-        set((s) => withPlots(s, [...s.categories, { ...c, id: crypto.randomUUID(), archived: false, createdAt: Date.now() }])),
+      addCategory: (c) => {
+        const s = get();
+        if (activeCount(s.categories) >= s.categorySlots) return false;
+        set(withPlots(s, [...s.categories, { ...c, id: crypto.randomUUID(), archived: false, createdAt: Date.now() }]));
+        return true;
+      },
 
       updateCategory: (id, patch) =>
-        set((s) => withPlots(s, s.categories.map((c) => (c.id === id ? { ...c, ...patch } : c)))),
+        set((s) => {
+          const current = s.categories.find((c) => c.id === id);
+          const restoring = current?.archived && patch.archived === false;
+          if (restoring && activeCount(s.categories) >= s.categorySlots) return s;
+          return withPlots(s, s.categories.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+        }),
+
+      buyCategorySlot: () => {
+        const s = get();
+        const price = categorySlotPrice(s.categorySlots);
+        if (s.coins < price) return false;
+        set({ coins: s.coins - price, categorySlots: s.categorySlots + 1 });
+        return true;
+      },
 
       // Solo se borran categorías sin historial; las demás se archivan para no perder datos.
+      // Lo construido en su parcela se devuelve completo.
       deleteCategory: (id) =>
-        set((s) =>
-          s.sessions.some((x) => x.categoryId === id) || s.active?.categoryId === id
-            ? s
-            : { categories: s.categories.filter((c) => c.id !== id), plots: s.plots.filter((p) => p.categoryId !== id) },
-        ),
+        set((s) => {
+          if (s.sessions.some((x) => x.categoryId === id) || s.active?.categoryId === id) return s;
+          const cells = new Set(s.plots.find((p) => p.categoryId === id)?.cells.map(([x, y]) => key(x, y)));
+          const decos = s.decorations.filter((d) => cells.has(key(d.gx, d.gy)));
+          const paths = Object.entries(s.paths).filter(([k]) => cells.has(k));
+          const refund = decos.reduce((n, d) => n + d.price, 0) + paths.reduce((n, [, kind]) => n + (PATH_BY_ID[kind]?.price ?? 0), 0);
+          return {
+            categories: s.categories.filter((c) => c.id !== id),
+            plots: s.plots.filter((p) => p.categoryId !== id),
+            decorations: s.decorations.filter((d) => !decos.includes(d)),
+            paths: Object.fromEntries(Object.entries(s.paths).filter(([k]) => !cells.has(k))),
+            coins: s.coins + refund,
+          };
+        }),
 
       startFromPrefs: () => {
         const { prefs, categories, start } = get();
@@ -530,6 +568,8 @@ export const useStore = create<State>()(
   ),
 );
 
+const activeCount = (categories: Category[]) => categories.filter((c) => !c.archived).length;
+
 function pick(s: Persisted): Persisted {
   return Object.fromEntries(PERSISTED_KEYS.map((k) => [k, s[k]])) as unknown as Persisted;
 }
@@ -576,8 +616,7 @@ function plantingSpot(s: Persisted, categoryId: string): { plots: Plot[]; paths:
     plot = newPlot(categoryId, ...findPlotSpot(plots, s.decorations, s.paths));
     plots = [...plots, plot];
   }
-  const own = s.plants.filter((p) => p.categoryId === categoryId);
-  const cell = freeCell(plot, own);
+  const cell = freeCell(plot, occupiedCells(s.plants, s.decorations, s.paths));
   if (cell) return { plots, paths: s.paths, cell };
 
   const grown = growCells(layoutOf({ ...s, plots }), plot);

@@ -4,8 +4,9 @@ import {
   type GardenLayout, type PlotView,
 } from "../core/garden";
 import { SPECIES_BY_ID } from "../core/rewards";
-import { DECORATION_BY_ID, PATH_BY_ID } from "../core/shop";
+import { DECORATION_BY_ID, LIGHTS, PATH_BY_ID } from "../core/shop";
 import { SEASON_THEME, type Season, type SeasonTheme } from "../core/seasons";
+import { PHASE_THEME, type DayPhase } from "../core/daynight";
 import type { Cell, Decoration, Plant } from "../core/types";
 import { useStore } from "../store";
 import { PlantSprite, Sparkles, TIER_HEIGHT } from "./PlantSprite";
@@ -212,12 +213,13 @@ export interface GardenProps {
   onSelect: (s: GardenSelection | null) => void;
   selectedId: string | null;
   season: Season;
+  phase: DayPhase;
   tool: Tool | null;
   /** Se llama cuando una herramienta de un solo uso (comprar una decoración, mover) terminó. */
   onToolDone: () => void;
 }
 
-export function Garden({ onSelect, selectedId, season, tool, onToolDone }: GardenProps) {
+export function Garden({ onSelect, selectedId, season, phase, tool, onToolDone }: GardenProps) {
   const categories = useStore((s) => s.categories);
   const plants = useStore((s) => s.plants);
   const decorations = useStore((s) => s.decorations);
@@ -231,6 +233,8 @@ export function Garden({ onSelect, selectedId, season, tool, onToolDone }: Garde
   );
   const { width: W, height: H } = layout;
   const theme = SEASON_THEME[season];
+  const night = PHASE_THEME[phase];
+  const lights = useMemo(() => decorations.filter((d) => LIGHTS[d.kind]), [decorations]);
 
   const { ground, scenery } = useMemo(() => {
     const nearPlot = (x: number, y: number) =>
@@ -242,6 +246,12 @@ export function Garden({ onSelect, selectedId, season, tool, onToolDone }: Garde
         const k = key(gx, gy);
         const r = hash(gx, gy);
         if (layout.cellOwner.has(k)) {
+          // Las baldosas con construcciones van con pasto; las de cultivo, con tierra arada.
+          if (k in layout.paths || layout.decoAt.has(k)) {
+            ground.push(<polygon key={k} points={diamond(gx, gy)} fill={theme.grass[Math.floor(r * theme.grass.length)]} />);
+            if (k in layout.paths) ground.push(<PathTile key={`${k}p`} gx={gx} gy={gy} kind={layout.paths[k]} />);
+            continue;
+          }
           ground.push(<polygon key={k} points={diamond(gx, gy)} fill={(gx + gy) % 2 ? "#9a6b45" : "#a37450"} />);
           const a = iso(gx + 0.2, gy + 0.5), b = iso(gx + 0.8, gy + 0.5);
           ground.push(<line key={`${k}l`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#86593a" strokeWidth={1.2} />);
@@ -296,7 +306,7 @@ export function Garden({ onSelect, selectedId, season, tool, onToolDone }: Garde
 
   // Baldosas donde se puede usar la herramienta, resaltadas
   const targets = useMemo(() => {
-    if (!tool || tool.kind === "deco" || tool.kind === "path" || tool.kind === "move-deco") return [];
+    if (!tool || tool.kind === "path") return [];
     const out: string[] = [];
     for (let gy = 0; gy < H; gy++)
       for (let gx = 0; gx < W; gx++) if (canApply(tool, layout, gx, gy, coins)) out.push(diamond(gx, gy));
@@ -460,7 +470,7 @@ export function Garden({ onSelect, selectedId, season, tool, onToolDone }: Garde
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
       onPointerCancel={() => { drag.current = null; painting.current = null; }}
       onPointerLeave={() => setHover(null)} onContextMenu={(e) => e.preventDefault()}
-      style={{ background: `linear-gradient(${theme.sky[0]}, ${theme.sky[1]})` }}>
+      style={{ background: skyBackground(night.sky ?? theme.sky, night.stars) }}>
       <svg width="100%" height="100%"
         onClickCapture={(e) => {
           if (suppressClick.current) {
@@ -475,6 +485,7 @@ export function Garden({ onSelect, selectedId, season, tool, onToolDone }: Garde
         }}
         onClick={() => onSelect(null)}>
         <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
+          <g id="garden-world">
           <polygon points={face(left, ISLAND_DEPTH)} fill="#8a5a3b" />
           <polygon points={face(right, ISLAND_DEPTH)} fill="#6e4630" />
           <polygon points={face(left, 4)} fill={theme.rim[0]} />
@@ -490,6 +501,8 @@ export function Garden({ onSelect, selectedId, season, tool, onToolDone }: Garde
           {objects.map((o) => (
             <g key={o.key} opacity={o.key === movingId ? 0.35 : 1}>{o.el}</g>
           ))}
+          </g>
+          {night.tint && <NightLayer phase={phase} lights={lights} bounds={bounds} />}
           {showHover && tool.kind !== "path" && tool.kind !== "expand" && (
             <g opacity={hoverValid ? 0.75 : 0.35} pointerEvents="none"><Ghost tool={tool} x={hover[0]} y={hover[1]} /></g>
           )}
@@ -512,6 +525,82 @@ export function Garden({ onSelect, selectedId, season, tool, onToolDone }: Garde
         </button>
       )}
     </div>
+  );
+}
+
+const STARS = Array.from({ length: 46 }, (_, i) => ({
+  x: hash(i, 21) * 100, y: hash(i, 37) * 55, r: 0.6 + hash(i, 53) * 1.1,
+}));
+
+function skyBackground(sky: [string, string], stars: boolean): string {
+  const base = `linear-gradient(${sky[0]}, ${sky[1]})`;
+  if (!stars) return base;
+  const dots = STARS.map((s) => `radial-gradient(${s.r}px ${s.r}px at ${s.x}% ${s.y}%, #fffbe6 60%, transparent)`);
+  return [...dots, base].join(", ");
+}
+
+/** Componentes RGB (0–1) de un color #rrggbb. */
+function rgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+/**
+ * Oscurece el jardín al atardecer y de noche: una copia del mundo (`<use>`) pasada por un filtro
+ * que la tiñe, así el cielo no se toca. Los faroles abren un hueco en esa copia (máscara)
+ * y suman un resplandor cálido encima.
+ */
+function NightLayer({ phase, lights, bounds }: {
+  phase: DayPhase;
+  lights: Decoration[];
+  bounds: { minX: number; maxX: number; minY: number; maxY: number };
+}) {
+  const t = PHASE_THEME[phase];
+  const pad = 200;
+  const rect = { x: bounds.minX - pad, y: bounds.minY - pad, width: bounds.maxX - bounds.minX + 2 * pad, height: bounds.maxY - bounds.minY + 2 * pad };
+  const pools = lights.map((d) => {
+    const L = LIGHTS[d.kind];
+    const c = iso(d.gx + 0.5, d.gy + 0.5);
+    return { d, L, c, rx: L.radius * (TILE_W / 2), ry: L.radius * (TILE_H / 2) };
+  });
+  const kinds = [...new Set(lights.map((d) => d.kind))];
+  // Igual que multiplicar por el color del velo con su opacidad: c · (1 − o + o · tinte)
+  const [r, g, b] = rgb(t.tint!).map((v) => 1 - t.tintOpacity + t.tintOpacity * v);
+  return (
+    <g pointerEvents="none">
+      <defs>
+        <filter id="night-filter" filterUnits="userSpaceOnUse" {...rect} colorInterpolationFilters="sRGB">
+          <feColorMatrix type="matrix" values={`${r} 0 0 0 0  0 ${g} 0 0 0  0 0 ${b} 0 0  0 0 0 1 0`} />
+        </filter>
+        <radialGradient id="night-hole">
+          <stop offset="0%" stopColor="#000" stopOpacity={t.lights} />
+          <stop offset="55%" stopColor="#000" stopOpacity={t.lights * 0.7} />
+          <stop offset="100%" stopColor="#000" stopOpacity={0} />
+        </radialGradient>
+        {kinds.map((k) => (
+          <radialGradient key={k} id={`glow-${k}`}>
+            <stop offset="0%" stopColor={LIGHTS[k].color} stopOpacity={0.55 * t.lights} />
+            <stop offset="100%" stopColor={LIGHTS[k].color} stopOpacity={0} />
+          </radialGradient>
+        ))}
+        <mask id="night-mask" maskUnits="userSpaceOnUse" {...rect}>
+          <rect {...rect} fill="#fff" />
+          {pools.map(({ d, c, rx, ry, L }) => (
+            <g key={d.id}>
+              <ellipse cx={c.x} cy={c.y} rx={rx} ry={ry} fill="url(#night-hole)" />
+              <circle cx={c.x} cy={c.y - L.height} r={rx * 0.45} fill="url(#night-hole)" />
+            </g>
+          ))}
+        </mask>
+      </defs>
+      <use href="#garden-world" filter="url(#night-filter)" mask="url(#night-mask)" />
+      {pools.map(({ d, c, rx, ry, L }) => (
+        <g key={d.id} style={{ mixBlendMode: "screen" }}>
+          <ellipse cx={c.x} cy={c.y} rx={rx} ry={ry} fill={`url(#glow-${d.kind})`} />
+          <circle cx={c.x} cy={c.y - L.height} r={12} fill={`url(#glow-${d.kind})`} className="glow" />
+        </g>
+      ))}
+    </g>
   );
 }
 

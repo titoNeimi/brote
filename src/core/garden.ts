@@ -1,7 +1,10 @@
 import type { Category, Cell, Decoration, Paths, Plant, Plot } from "./types";
 
-export const PLOT_WIDTH = 6;
-export const PLOT_DEPTH = 4;
+export const PLOT_WIDTH = 7;
+export const PLOT_DEPTH = 5;
+/** Tamaño de las parcelas en el formato v2; solo lo usa la migración. */
+const LEGACY_WIDTH = 6;
+const LEGACY_DEPTH = 4;
 /** Pasto entre parcelas nuevas. */
 export const PLOT_GAP = 2;
 export const MARGIN = 2;
@@ -66,7 +69,7 @@ export function layoutGarden(
     const category = byId.get(plot.categoryId);
     if (!category || plot.cells.length === 0) continue;
     const own = plants.filter((p) => p.categoryId === plot.categoryId);
-    if (category.archived && own.length === 0) continue;
+    if (category.archived && own.length === 0 && !holdsBuildings(plot, decorations)) continue;
     views.push({ plot, category, plants: own, sign: signOf(plot) });
   }
 
@@ -94,6 +97,12 @@ export function layoutGarden(
   };
 }
 
+/** Si la parcela tiene decoraciones adentro (entonces no se puede ocultar). */
+function holdsBuildings(plot: Plot, decorations: Decoration[]): boolean {
+  const cells = new Set(plot.cells.map(([x, y]) => key(x, y)));
+  return decorations.some((d) => cells.has(key(d.gx, d.gy)));
+}
+
 function inBounds(L: GardenLayout, x: number, y: number) {
   return x >= 0 && y >= 0 && x < L.width && y < L.height;
 }
@@ -104,17 +113,28 @@ function isGround(L: GardenLayout, x: number, y: number) {
   return inBounds(L, x, y) && !L.cellOwner.has(k) && !L.signOwner.has(k);
 }
 
+/**
+ * Las decoraciones se construyen solo dentro de las parcelas, en baldosas sin planta.
+ * Pueden quedar sobre un camino. (Las que se compraron antes de esta regla siguen en el pasto.)
+ */
 export function canPlaceDecoration(L: GardenLayout, x: number, y: number): boolean {
-  return isGround(L, x, y) && !L.decoAt.has(key(x, y));
+  const k = key(x, y);
+  return L.cellOwner.has(k) && !L.plantAt.has(k) && !L.decoAt.has(k);
 }
 
 export function canMoveDecoration(L: GardenLayout, deco: Decoration, x: number, y: number): boolean {
   return (deco.gx !== x || deco.gy !== y) && canPlaceDecoration(L, x, y);
 }
 
-/** Los caminos van sobre el pasto; las decoraciones pueden quedar encima. */
+/**
+ * Los caminos van sobre el pasto (para unir parcelas) o dentro de una parcela en baldosas sin planta.
+ * Nunca sobre un cartel. Las decoraciones pueden quedar encima.
+ */
 export function canPaintPath(L: GardenLayout, x: number, y: number, kind: string): boolean {
-  return isGround(L, x, y) && L.paths[key(x, y)] !== kind;
+  const k = key(x, y);
+  if (L.paths[k] === kind) return false;
+  if (L.cellOwner.has(k)) return !L.plantAt.has(k);
+  return isGround(L, x, y);
 }
 
 export function canErasePath(L: GardenLayout, x: number, y: number): boolean {
@@ -149,18 +169,26 @@ export function canExpand(L: GardenLayout, categoryId: string, x: number, y: num
 }
 
 export function expandPrice(plot: Plot): number {
-  return 25 + 5 * plot.bought;
+  return 8 + 2 * plot.bought;
 }
 
-/** Destino de una planta: solo dentro de su propia parcela. Si hay otra planta, se intercambian. */
+/**
+ * Destino de una planta: solo dentro de su propia parcela, en una baldosa sin construcciones.
+ * Si hay otra planta, se intercambian.
+ */
 export function moveTarget(L: GardenLayout, plant: Plant, x: number, y: number): "move" | "swap" | null {
+  const k = key(x, y);
   if (plant.gx === x && plant.gy === y) return null;
-  if (L.cellOwner.get(key(x, y)) !== plant.categoryId) return null;
-  return L.plantAt.has(key(x, y)) ? "swap" : "move";
+  if (L.cellOwner.get(k) !== plant.categoryId || L.decoAt.has(k) || k in L.paths) return null;
+  return L.plantAt.has(k) ? "swap" : "move";
 }
 
-export function freeCell(plot: Plot, plants: Plant[], rand: () => number = Math.random): Cell | null {
-  const taken = new Set(plants.map((p) => key(p.gx, p.gy)));
+/** Baldosas ocupadas para plantar: plantas, decoraciones y caminos. */
+export function occupiedCells(plants: Plant[], decorations: Decoration[], paths: Paths): Set<string> {
+  return new Set([...plants.map((p) => key(p.gx, p.gy)), ...decorations.map((d) => key(d.gx, d.gy)), ...Object.keys(paths)]);
+}
+
+export function freeCell(plot: Plot, taken: Set<string>, rand: () => number = Math.random): Cell | null {
   const free = plot.cells.filter(([x, y]) => !taken.has(key(x, y)));
   return free.length ? free[Math.floor(rand() * free.length)] : null;
 }
@@ -244,10 +272,10 @@ export function migrateLegacyGarden(
   const plots: Plot[] = [];
   const plants: Plant[] = [];
   visible.forEach((c, i) => {
-    const gx = MARGIN + i * (PLOT_WIDTH + PLOT_GAP), gy = MARGIN;
+    const gx = MARGIN + i * (LEGACY_WIDTH + PLOT_GAP), gy = MARGIN;
     const own = legacyPlants.filter((p) => p.categoryId === c.id);
-    const rows = Math.max(PLOT_DEPTH, own.reduce((m, p) => Math.max(m, p.y), -1) + 2);
-    plots.push({ categoryId: c.id, cells: rectCells(gx, gy, PLOT_WIDTH, rows), fence: "wood", bought: 0 });
+    const rows = Math.max(LEGACY_DEPTH, own.reduce((m, p) => Math.max(m, p.y), -1) + 2);
+    plots.push({ categoryId: c.id, cells: rectCells(gx, gy, LEGACY_WIDTH, rows), fence: "wood", bought: 0 });
     for (const { x, y, ...rest } of own) plants.push({ ...rest, gx: gx + x, gy: gy + y });
   });
 
@@ -273,4 +301,14 @@ function nearestRing(x0: number, y0: number, r: number, ok: (x: number, y: numbe
     for (let dx = -r; dx <= r; dx++)
       if (Math.max(Math.abs(dx), Math.abs(dy)) === r && ok(x0 + dx, y0 + dy)) return [x0 + dx, y0 + dy];
   return null;
+}
+
+/* ---------- Límite de categorías ---------- */
+
+/** Categorías activas que se pueden tener sin comprar más espacios. */
+export const BASE_CATEGORY_SLOTS = 5;
+
+/** Precio del próximo espacio de categoría, según cuántos hay. */
+export function categorySlotPrice(slots: number): number {
+  return 250 * (slots - BASE_CATEGORY_SLOTS + 1);
 }

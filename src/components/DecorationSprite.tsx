@@ -40,8 +40,58 @@ const DRAW: Record<string, () => JSX.Element> = {
       <circle cx={0} cy={-34} r={14} fill="#ffe7a0" opacity={0.25} className="glow" />
       <rect x={-1.5} y={-30} width={3} height={30} fill="#3d4448" />
       <rect x={-4} y={-2} width={8} height={2} fill="#3d4448" />
-      <path d="M-5 -30 L5 -30 L4 -39 L-4 -39 Z" fill="#ffd66b" stroke="#3d4448" strokeWidth={1.2} />
+      <path d="M-5 -30 L5 -30 L4 -39 L-4 -39 Z" fill="#ffd66b" stroke="#3d4448" strokeWidth={1.2} className="flame" />
       <path d="M-6 -39 L0 -44 L6 -39 Z" fill="#3d4448" />
+    </g>
+  ),
+  torch: () => (
+    <g>
+      <rect x={-1.6} y={-24} width={3.2} height={24} fill={WOOD_DARK} />
+      <rect x={-2.2} y={-26} width={4.4} height={4} fill="#5a3a22" />
+      <path d="M-3.5 -26 L3.5 -26 L2.5 -22 L-2.5 -22 Z" fill="#3d4448" />
+      <path className="flicker" d="M0 -38 Q4.5 -31 2.8 -27 Q0 -25 -2.8 -27 Q-4.5 -31 0 -38 Z" fill="#ff8c2b" />
+      <path className="flicker" d="M0 -34 Q2.3 -30 1.4 -27.5 Q0 -26.5 -1.4 -27.5 Q-2.3 -30 0 -34 Z" fill="#ffe27a" />
+    </g>
+  ),
+  paperlantern: () => (
+    <g>
+      <rect x={-1.3} y={-40} width={2.6} height={40} fill={WOOD_DARK} />
+      <path d="M0 -40 L9 -40 L9 -37" stroke={WOOD_DARK} strokeWidth={1.8} fill="none" />
+      <line x1={9} y1={-37} x2={9} y2={-34} stroke="#4a2e17" strokeWidth={0.8} />
+      <ellipse cx={9} cy={-27} rx={6} ry={7.5} fill="#e8553f" />
+      <ellipse cx={9} cy={-27} rx={3.5} ry={6} fill="#ff9a6b" opacity={0.7} />
+      <path d="M3.5 -27 Q9 -24.5 14.5 -27 M3.8 -30 Q9 -27.5 14.2 -30 M3.8 -24 Q9 -21.5 14.2 -24" stroke="#b83a2a" strokeWidth={0.6} fill="none" />
+      <rect x={6.5} y={-35} width={5} height={1.8} fill="#2f2a26" />
+      <rect x={6.5} y={-20.5} width={5} height={1.8} fill="#2f2a26" />
+      <line x1={9} y1={-18.7} x2={9} y2={-15} stroke="#d8a23a" strokeWidth={0.9} />
+    </g>
+  ),
+  stonelantern: () => (
+    <g>
+      <path d="M-7 0 L7 0 L5.5 -3 L-5.5 -3 Z" fill={STONE_DARK} />
+      <rect x={-2.5} y={-10} width={5} height={7} fill={STONE} />
+      <path d="M-6 -10 L6 -10 L5 -12 L-5 -12 Z" fill={STONE_LIGHT} />
+      <rect x={-4.5} y={-19} width={9} height={7} fill={STONE} />
+      <rect x={-2.5} y={-17.5} width={5} height={4.5} fill="#ffd37a" className="flame" />
+      <path d="M-9 -19 L0 -25 L9 -19 Z" fill={STONE_DARK} />
+      <path d="M-9 -19 L9 -19 L8 -20.5 L-8 -20.5 Z" fill={STONE_LIGHT} />
+      <circle cx={0} cy={-26.5} r={2} fill={STONE} />
+    </g>
+  ),
+  streetlamp: () => (
+    <g>
+      <rect x={-6} y={-3} width={12} height={3} fill="#2d3236" />
+      <rect x={-2} y={-46} width={4} height={44} fill="#3d4448" />
+      <rect x={-3} y={-12} width={6} height={3} fill="#2d3236" />
+      <path d="M0 -44 Q-6 -50 -13 -46 M0 -44 Q6 -50 13 -46" stroke="#3d4448" strokeWidth={2} fill="none" />
+      {[-13, 13].map((x) => (
+        <g key={x} transform={`translate(${x} 0)`}>
+          <path d="M-4.5 -38 L4.5 -38 L3.5 -46 L-3.5 -46 Z" fill="#fff1b8" stroke="#3d4448" strokeWidth={1.1} className="flame" />
+          <path d="M-5.5 -46 L0 -50 L5.5 -46 Z" fill="#3d4448" />
+          <rect x={-2.5} y={-38} width={5} height={1.6} fill="#3d4448" />
+        </g>
+      ))}
+      <circle cx={0} cy={-48} r={2} fill="#3d4448" />
     </g>
   ),
   gnome: () => (
@@ -245,4 +295,5 @@ export const DECORATION_HEIGHT: Record<string, number> = {
   mushrooms: 14, bench: 22, lamp: 44, gnome: 27, birdhouse: 46, scarecrow: 44,
   beehive: 28, pond: 12, well: 42, fountain: 36, windmill: 80,
   birdbath: 24, wishing: 32, tiered: 44, statue: 48,
+  torch: 38, paperlantern: 40, stonelantern: 28, streetlamp: 52,
 };

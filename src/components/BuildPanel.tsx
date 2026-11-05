@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import { useStore } from "../store";
 import { expandPrice } from "../core/garden";
-import { DECORATIONS, FENCES, PATHS } from "../core/shop";
+import { DECORATION_GROUPS, DECORATIONS, FENCES, PATHS } from "../core/shop";
 import { levelFor, xpOf } from "../core/progression";
 import { FenceSwatch, PathSwatch } from "./BuildSprites";
 import { DecorationSprite, DECORATION_HEIGHT } from "./DecorationSprite";
@@ -58,7 +58,9 @@ function PathsSection({ tool, setTool }: ToolProps) {
   const current = tool?.kind === "path" ? tool.path : null;
   return (
     <>
-      <p className="muted small">Elegí un camino y pintalo sobre el pasto: hacé click o arrastrá.</p>
+      <p className="muted small">
+        Pintalo sobre el pasto para unir tus parcelas, o adentro de una parcela para armar senderos. Hacé click o arrastrá.
+      </p>
       <div className="swatch-grid">
         {PATHS.map((p) => (
           <button key={p.id} className={`swatch-btn${current === p.id ? " on" : ""}`} onClick={() => setTool({ kind: "path", path: p.id })}>
@@ -82,7 +84,8 @@ function PlotsSection({ tool, setTool }: ToolProps) {
   return (
     <>
       <p className="muted small">
-        Elegí una parcela y sumale baldosas pegadas (se resaltan). Cada baldosa cuesta un poco más que la anterior.
+        Elegí una parcela y sumale baldosas pegadas (se resaltan). Las parcelas son tu espacio para construir:
+        plantas, caminos, faroles y adornos van adentro. Cada baldosa cuesta un poco más que la anterior.
       </p>
       <div className="plot-list">
         {categories.map((c) => {
@@ -148,11 +151,12 @@ function DecorSection({ tool, setTool }: ToolProps) {
   const current = tool?.kind === "deco" ? tool.deco : null;
   return (
     <>
-      {(["fountain", "decor"] as const).map((group) => (
-        <div key={group}>
-          <label className="field-label">{group === "fountain" ? "Fuentes" : "Decoraciones"}</label>
+      <p className="muted small">Se construyen dentro de las parcelas, en baldosas sin planta.</p>
+      {DECORATION_GROUPS.map((group) => (
+        <div key={group.id}>
+          <label className="field-label">{group.name}</label>
           <div className="swatch-grid small">
-            {DECORATIONS.filter((d) => d.group === group).map((d) => {
+            {DECORATIONS.filter((d) => d.group === group.id).map((d) => {
               const locked = level < d.level;
               const h = DECORATION_HEIGHT[d.id] ?? 30;
               return (

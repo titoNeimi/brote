@@ -123,7 +123,11 @@ main { flex: 1; min-height: 0; position: relative; }
   position: absolute; right: 16px; bottom: 16px;
   display: flex; flex-direction: column; gap: 6px;
 }
-.garden-controls button { width: 36px; height: 36px; padding: 0; box-shadow: var(--shadow); }
+.garden-controls button {
+  display: grid; place-items: center;
+  width: 36px; height: 36px; padding: 0; line-height: 1; box-shadow: var(--shadow);
+}
+.garden-controls button svg { display: block; }
 
 .plant { cursor: pointer; }
 .plant:hover > g:nth-child(2) { filter: brightness(1.08); }
@@ -249,6 +253,8 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 
 .glow { animation: glow 3s ease-in-out infinite; }
 @keyframes glow { 50% { opacity: 0.45; } }
+.flicker { transform-box: fill-box; transform-origin: 50% 100%; animation: flicker 0.9s ease-in-out infinite alternate; }
+@keyframes flicker { 50% { transform: scale(0.92, 1.06); } 100% { transform: scale(1.04, 0.95); } }
 .bird { animation: hop 4s ease-in-out infinite; }
 @keyframes hop { 0%, 80%, 100% { transform: translateY(0); } 85% { transform: translateY(-2px); } 90% { transform: translateY(0); } }
 .bee { animation: buzz 2.4s ease-in-out infinite; }
@@ -276,7 +282,7 @@ button.small { padding: 4px 10px; font-size: 0.82rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .particles { display: none; }
-  .sway, .blades, .bee, .bird, .twinkle path { animation: none !important; }
+  .sway, .blades, .bee, .bird, .twinkle path, .flicker { animation: none !important; }
 }
 
 /* Panel del temporizador */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canErasePath, canExpand, canPaintPath, canPlaceDecoration, ensurePlots, freeCell, growCells, key, layoutGarden,
-  migrateLegacyGarden, moveTarget, newPlot, signOf, type LegacyPlant,
+  migrateLegacyGarden, moveTarget, newPlot, occupiedCells, rectCells, signOf, type LegacyPlant,
 } from "./garden";
 import type { Category, Decoration, Plant, Plot } from "./types";
 
@@ -13,8 +13,13 @@ const plant = (id: string, gx: number, gy: number, categoryId = "a"): Plant => (
 });
 
 describe("parcelas", () => {
-  const plotA = newPlot("a", 2, 2); // x 2..7, y 2..5
-  const plotB = newPlot("b", 10, 2);
+  const plot6x4 = (id: string, gx: number, gy: number): Plot => ({ ...newPlot(id, gx, gy), cells: rectCells(gx, gy, 6, 4) });
+  const plotA = plot6x4("a", 2, 2); // x 2..7, y 2..5
+  const plotB = plot6x4("b", 10, 2);
+
+  it("las parcelas nuevas son de 7 × 5", () => {
+    expect(newPlot("a", 0, 0).cells).toHaveLength(35);
+  });
 
   it("el cartel va delante de la fila más adelantada", () => {
     expect(signOf(plotA)).toEqual({ gate: [5, 5], cell: [5, 6] });
@@ -36,18 +41,33 @@ describe("parcelas", () => {
     expect(canExpand(L2, "a", 9, 2)).toBe(false);
   });
 
-  it("caminos y decoraciones van sobre el pasto, nunca sobre una parcela o su cartel", () => {
-    const deco: Decoration = { id: "d", kind: "bench", gx: 1, gy: 8, price: 80 };
-    const L = layoutGarden([cat("a")], [plotA], [], [deco], { "1,9": "dirt" });
-    expect(canPaintPath(L, 3, 3, "dirt")).toBe(false);
-    expect(canPaintPath(L, 5, 6, "dirt")).toBe(false);
-    expect(canPaintPath(L, 1, 8, "dirt")).toBe(true); // debajo de una decoración
+  it("las decoraciones se construyen solo dentro de las parcelas", () => {
+    const deco: Decoration = { id: "d", kind: "bench", gx: 3, gy: 3, price: 80 };
+    const L = layoutGarden([cat("a")], [plotA], [plant("p", 4, 4)], [deco], { "2,2": "dirt" });
+    expect(canPlaceDecoration(L, 2, 3)).toBe(true);
+    expect(canPlaceDecoration(L, 2, 2)).toBe(true); // sobre un camino de la parcela
+    expect(canPlaceDecoration(L, 3, 3)).toBe(false); // ocupada
+    expect(canPlaceDecoration(L, 4, 4)).toBe(false); // planta
+    expect(canPlaceDecoration(L, 1, 8)).toBe(false); // pasto
+    expect(canPlaceDecoration(L, 5, 6)).toBe(false); // cartel
+  });
+
+  it("los caminos van sobre el pasto o en baldosas libres de una parcela", () => {
+    const L = layoutGarden([cat("a")], [plotA], [plant("p", 4, 4)], [], { "1,9": "dirt" });
+    expect(canPaintPath(L, 3, 3, "dirt")).toBe(true); // dentro de la parcela
+    expect(canPaintPath(L, 4, 4, "dirt")).toBe(false); // planta
+    expect(canPaintPath(L, 5, 6, "dirt")).toBe(false); // cartel
+    expect(canPaintPath(L, 1, 8, "dirt")).toBe(true);
     expect(canPaintPath(L, 1, 9, "dirt")).toBe(false); // ya es ese camino
     expect(canPaintPath(L, 1, 9, "brick")).toBe(true);
     expect(canErasePath(L, 1, 9)).toBe(true);
-    expect(canPlaceDecoration(L, 1, 9)).toBe(true); // sobre un camino
-    expect(canPlaceDecoration(L, 1, 8)).toBe(false); // ocupada
-    expect(canPlaceDecoration(L, 5, 6)).toBe(false); // cartel
+  });
+
+  it("las plantas nuevas no van sobre construcciones", () => {
+    const tiny: Plot = { ...plotA, cells: rectCells(2, 2, 2, 1) };
+    const deco: Decoration = { id: "d", kind: "bench", gx: 2, gy: 2, price: 80 };
+    expect(freeCell(tiny, occupiedCells([], [deco], {}))).toEqual([3, 2]);
+    expect(freeCell(tiny, occupiedCells([], [deco], { "3,2": "dirt" }))).toBeNull();
   });
 
   it("las plantas se mueven dentro de su parcela e intercambian lugar", () => {
@@ -58,11 +78,14 @@ describe("parcelas", () => {
     expect(moveTarget(L, p1, 2, 2)).toBeNull();
     expect(moveTarget(L, p1, 11, 2)).toBeNull(); // otra parcela
     expect(moveTarget(L, p1, 1, 1)).toBeNull(); // pasto
+    const L2 = layoutGarden([cat("a")], [plotA], [p1], [{ id: "d", kind: "bench", gx: 4, gy: 4, price: 0 }], { "5,4": "dirt" });
+    expect(moveTarget(L2, p1, 4, 4)).toBeNull(); // decoración
+    expect(moveTarget(L2, p1, 5, 4)).toBeNull(); // camino
   });
 
   it("cuando se llena, crece por la fila de adelante y puede pisar caminos", () => {
     const full = plotA.cells.map(([x, y], i) => plant(String(i), x, y));
-    expect(freeCell(plotA, full)).toBeNull();
+    expect(freeCell(plotA, occupiedCells(full, [], {}))).toBeNull();
     const L = layoutGarden([cat("a")], [plotA], full, [], { "3,6": "stone" });
     const grown = growCells(L, plotA);
     // la fila de adelante (incluido el lugar del cartel), respetando el camino del usuario
@@ -88,9 +111,11 @@ describe("parcelas", () => {
     expect(ensurePlots([cat("a"), cat("c", true)], [plotA], [], {})).toHaveLength(1); // archivada: sin parcela nueva
   });
 
-  it("oculta parcelas de categorías archivadas sin plantas", () => {
+  it("oculta parcelas de categorías archivadas sin plantas ni construcciones", () => {
     const L = layoutGarden([cat("a", true), cat("b", true)], [plotA, plotB], [plant("1", 10, 2, "b")]);
     expect(L.plots.map((v) => v.category.id)).toEqual(["b"]);
+    const deco: Decoration = { id: "d", kind: "bench", gx: 3, gy: 3, price: 80 };
+    expect(layoutGarden([cat("a", true)], [plotA], [], [deco]).plots).toHaveLength(1);
   });
 });
 

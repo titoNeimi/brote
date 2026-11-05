@@ -1,5 +1,6 @@
 import { useStore } from "../store";
-import { DECORATIONS, FERTILIZER } from "../core/shop";
+import { DECORATION_GROUPS, DECORATIONS, FERTILIZER } from "../core/shop";
+import { categorySlotPrice } from "../core/garden";
 import { levelFor, xpOf } from "../core/progression";
 import { DecorationSprite, DECORATION_HEIGHT } from "./DecorationSprite";
 import { Coin } from "./Coin";
@@ -36,6 +37,10 @@ export function ShopView({ onBuyDecoration, onOpenBuild }: { onBuyDecoration: (k
   const fertilizer = useStore((s) => s.inventory.fertilizer);
   const buyFertilizer = useStore((s) => s.buyFertilizer);
   const owned = useStore((s) => s.decorations);
+  const slots = useStore((s) => s.categorySlots);
+  const buyCategorySlot = useStore((s) => s.buyCategorySlot);
+  const activeCategories = useStore((s) => s.categories.filter((c) => !c.archived).length);
+  const slotPrice = categorySlotPrice(slots);
   const { level } = levelFor(xpOf(sessions));
 
   return (
@@ -48,7 +53,9 @@ export function ShopView({ onBuyDecoration, onOpenBuild }: { onBuyDecoration: (k
       <section className="panel build-promo">
         <div className="grow">
           <h3>Caminos, parcelas y vallas</h3>
-          <p className="muted small">Pintá caminos, agrandá tus parcelas con la forma que quieras y cambiá el estilo de las vallas.</p>
+          <p className="muted small">
+            Agrandá tus parcelas con la forma que quieras, construí adentro y unilas con caminos. También podés cambiar las vallas.
+          </p>
         </div>
         <button className="primary" onClick={onOpenBuild}>🔨 Construir</button>
       </section>
@@ -66,14 +73,28 @@ export function ShopView({ onBuyDecoration, onOpenBuild }: { onBuyDecoration: (k
             Comprar · {FERTILIZER.price} <Coin />
           </button>
         </div>
+        <div className="shop-item wide">
+          <div className="consumable-icon">🏷️</div>
+          <div className="grow">
+            <strong>Espacio para categoría</strong>
+            <p className="muted small">Cada categoría tiene su parcela. Sumá un espacio para tener una categoría activa más.</p>
+            <p className="small">Usás <strong>{activeCategories} / {slots}</strong></p>
+          </div>
+          <button className="primary" disabled={coins < slotPrice} onClick={buyCategorySlot}>
+            Comprar · {slotPrice} <Coin />
+          </button>
+        </div>
       </section>
 
-      {(["fountain", "decor"] as const).map((group) => (
-        <section key={group} className="panel">
-          <h3>{group === "fountain" ? "Fuentes" : "Decoraciones"}</h3>
-          <p className="muted small">Al comprar, elegís dónde ponerla en el jardín. Podés moverla o venderla por la mitad de su precio.</p>
+      {DECORATION_GROUPS.map((group) => (
+        <section key={group.id} className="panel">
+          <h3>{group.name}</h3>
+          <p className="muted small">
+            {group.id === "light" ? "Iluminan el jardín al atardecer y de noche. " : ""}
+            Al comprar, elegís dónde ponerla dentro de una parcela. Podés moverla o venderla por la mitad de su precio.
+          </p>
           <div className="shop-grid">
-            {DECORATIONS.filter((d) => d.group === group).map((d) => {
+            {DECORATIONS.filter((d) => d.group === group.id).map((d) => {
               const locked = level < d.level;
               const count = owned.filter((o) => o.kind === d.id).length;
               return (

@@ -6,6 +6,7 @@ import { currentStreak, focusedSince, startOfDay } from "./core/stats";
 import { levelFor, streakMultiplier, xpOf } from "./core/progression";
 import { DECORATION_BY_ID, SELL_RATIO } from "./core/shop";
 import { seasonFor, SEASON_LABEL } from "./core/seasons";
+import { DAY_PHASE_LABEL, phaseFor } from "./core/daynight";
 import { isTauri } from "./lib/platform";
 import { openMiniWindow } from "./lib/desktop";
 import { useCompactTabs, useNow } from "./lib/hooks";
@@ -73,6 +74,7 @@ export default function App() {
   const streak = currentStreak(sessions, now);
   const { level, current, needed } = levelFor(xpOf(sessions));
   const season = prefs.season === "auto" ? seasonFor(new Date(now), prefs.hemisphere) : prefs.season;
+  const phase = prefs.dayNight === "auto" ? phaseFor(new Date(now)) : prefs.dayNight;
   const banner = !building && tool ? toolBanner(tool) : null;
   const startTool = (t: Tool) => { setTool(t); setSelected(null); };
 
@@ -111,7 +113,7 @@ export default function App() {
         {tab === "garden" && (
           <div className="garden-view">
             <Garden onSelect={onSelect} selectedId={selected?.kind === "plant" ? selected.plant.id : selected?.deco.id ?? null}
-              season={season} tool={tool} onToolDone={() => setTool(null)} />
+              season={season} phase={phase} tool={tool} onToolDone={() => setTool(null)} />
             <SeasonParticles season={season} />
             {building ? (
               <BuildPanel tool={tool} setTool={setTool} onClose={() => { setBuilding(false); setTool(null); }} />
@@ -128,7 +130,9 @@ export default function App() {
             {!building && (
               <button className="build-btn" onClick={() => { setBuilding(true); setTool(null); setSelected(null); }}>🔨 Construir</button>
             )}
-            <div className="season-chip">{SEASON_LABEL[season]}</div>
+            <div className="season-chip">
+              {SEASON_LABEL[season]} · {phase === "night" ? "🌙" : phase === "dusk" ? "🌇" : "☀️"} {DAY_PHASE_LABEL[phase]}
+            </div>
             {selected && !tool && <SelectionInfo selection={selected} onStartTool={startTool} onClose={() => setSelected(null)} />}
           </div>
         )}

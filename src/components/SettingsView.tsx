@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { exportBackup, parseBackup, useStore, type Ambient } from "../store";
 import { SPECIES_BY_ID } from "../core/rewards";
 import { SEASON_LABEL, type Season } from "../core/seasons";
+import { DAY_PHASE_LABEL, type DayPhasePref } from "../core/daynight";
 import { AMBIENT_LABEL } from "../lib/ambient";
 import { isTauri } from "../lib/platform";
 import { useUpdater } from "../lib/updater";
@@ -166,6 +167,14 @@ export function SettingsView() {
           <select value={prefs.season} onChange={(e) => setPrefs({ season: e.target.value as Season | "auto" })}>
             <option value="auto">Automática</option>
             {(Object.keys(SEASON_LABEL) as Season[]).map((s) => <option key={s} value={s}>{SEASON_LABEL[s]}</option>)}
+          </select>
+        </Row>
+        <Row label="Día y noche" hint="En automático sigue la hora de tu computadora. De noche se encienden los faroles.">
+          <select value={prefs.dayNight} onChange={(e) => setPrefs({ dayNight: e.target.value as DayPhasePref })}>
+            <option value="auto">Automático</option>
+            {(Object.keys(DAY_PHASE_LABEL) as (keyof typeof DAY_PHASE_LABEL)[]).map((p) => (
+              <option key={p} value={p}>{DAY_PHASE_LABEL[p]}</option>
+            ))}
           </select>
         </Row>
       </section>
